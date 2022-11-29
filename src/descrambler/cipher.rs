@@ -1,5 +1,5 @@
-use std::collections::HashMap;
 use once_cell::sync::Lazy;
+use std::collections::HashMap;
 
 use regex::Regex;
 
@@ -7,9 +7,8 @@ use crate::{Error, Result, TryCollect};
 
 pub(crate) type TransformerFn = (fn(&mut Vec<u8>, Option<isize>), &'static str);
 
-static JS_FUNCTION_REGEX: Lazy<Regex> = Lazy::new(||
-    Regex::new(r"\w+\.(\w+)\(\w,(\d+)\)").unwrap()
-);
+static JS_FUNCTION_REGEX: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"\w+\.(\w+)\(\w,(\d+)\)").unwrap());
 
 pub(crate) struct Cipher {
     transform_plan: Vec<String>,
@@ -22,14 +21,18 @@ impl Cipher {
 
         let (var, _): (&str, &str) = transform_plan
             .get(0)
-            .ok_or_else(|| Error::UnexpectedResponse(
-                "the provided JavaScript has an empty transform-plan".into()
-            ))?
+            .ok_or_else(|| {
+                Error::UnexpectedResponse(
+                    "the provided JavaScript has an empty transform-plan".into(),
+                )
+            })?
             .split('.')
             .try_collect()
-            .ok_or_else(|| Error::UnexpectedResponse(
-                "the transform-plan function call contains more then one dot".into()
-            ))?;
+            .ok_or_else(|| {
+                Error::UnexpectedResponse(
+                    "the transform-plan function call contains more then one dot".into(),
+                )
+            })?;
 
         let transform_map = get_transform_map(js, var)?;
 
@@ -48,11 +51,14 @@ impl Cipher {
 
         for js_fun_name in self.transform_plan.iter() {
             let (name, argument) = self.parse_function(js_fun_name)?;
-            let js_fun = self.transform_map
+            let js_fun = self
+                .transform_map
                 .get(name)
-                .ok_or_else(|| Error::UnexpectedResponse(format!(
-                    "no matching transform function for `{}`", js_fun_name
-                ).into()))?
+                .ok_or_else(|| {
+                    Error::UnexpectedResponse(
+                        format!("no matching transform function for `{}`", js_fun_name).into(),
+                    )
+                })?
                 .0;
             js_fun(signature, argument);
         }
@@ -70,10 +76,15 @@ impl Cipher {
     fn parse_function<'a>(&self, js_func: &'a str) -> Result<(&'a str, Option<isize>)> {
         let (fn_name, fn_arg) = JS_FUNCTION_REGEX
             .captures(js_func)
-            .ok_or_else(|| Error::UnexpectedResponse(format!(
-                "the JS_FUNCTION_REGEX `{}` did not match the JavaScript function {}",
-                *JS_FUNCTION_REGEX, js_func
-            ).into()))?
+            .ok_or_else(|| {
+                Error::UnexpectedResponse(
+                    format!(
+                        "the JS_FUNCTION_REGEX `{}` did not match the JavaScript function {}",
+                        *JS_FUNCTION_REGEX, js_func
+                    )
+                    .into(),
+                )
+            })?
             .iter()
             .skip(1)
             .try_collect()
@@ -107,7 +118,9 @@ impl Cipher {
             final signature: {:?}\n\
             transform_plan: {:?}\n\
             transform_map: {:?}",
-            signature, self.transform_plan, self.transform_map_dbg()
+            signature,
+            self.transform_plan,
+            self.transform_map_dbg()
         );
         log::error!("{}", error);
         eprintln!("{}", error);
@@ -119,40 +132,45 @@ impl Cipher {
         self.transform_map
             .iter()
             .map(|(key, (_f, name))| (key, name))
-            .fold(
-                String::new(),
-                |mut string, (key, name)| {
-                    string.push_str(key);
-                    string.push_str(" => ");
-                    string.push_str(name);
-                    string.push(';');
-                    string
-                },
-            )
+            .fold(String::new(), |mut string, (key, name)| {
+                string.push_str(key);
+                string.push_str(" => ");
+                string.push_str(name);
+                string.push(';');
+                string
+            })
     }
 }
 
 fn get_transform_plan(js: &str) -> Result<Vec<String>> {
     let name = regex::escape(get_initial_function_name(js)?);
-    let pattern = Regex::new(&format!(r#"{}=function\(\w\)\{{[a-z=.(")]*;(.*);(?:.+)}}"#, name)).unwrap();
-    Ok(
-        pattern
-            .captures(js)
-            .ok_or_else(|| Error::UnexpectedResponse(format!(
-                "could not extract the initial JavaScript function: {}",
-                pattern
-            ).into()))?
-            .get(1)
-            .expect("the pattern must contain at least one capture group")
-            .as_str()
-            .split(';')
-            .map(str::to_owned)
-            .collect()
-    )
+    let pattern = Regex::new(&format!(
+        r#"{}=function\(\w\)\{{[a-z=.(")]*;(.*);(?:.+)}}"#,
+        name
+    ))
+    .unwrap();
+    Ok(pattern
+        .captures(js)
+        .ok_or_else(|| {
+            Error::UnexpectedResponse(
+                format!(
+                    "could not extract the initial JavaScript function: {}",
+                    pattern
+                )
+                .into(),
+            )
+        })?
+        .get(1)
+        .expect("the pattern must contain at least one capture group")
+        .as_str()
+        .split(';')
+        .map(str::to_owned)
+        .collect())
 }
 
 fn get_initial_function_name(js: &str) -> Result<&str> {
-    static FUNCTION_PATTERNS: Lazy<[Regex; 12]> = Lazy::new(|| [
+    static FUNCTION_PATTERNS: Lazy<[Regex; 12]> = Lazy::new(|| {
+        [
         Regex::new(r"\b[cs]\s*&&\s*[adf]\.set\([^,]+\s*,\s*encodeURIComponent\s*\(\s*(?P<sig>[a-zA-Z0-9$]+)\(").unwrap(),
         Regex::new(r"\b[a-zA-Z0-9]+\s*&&\s*[a-zA-Z0-9]+\.set\([^,]+\s*,\s*encodeURIComponent\s*\(\s*(?P<sig>[a-zA-Z0-9$]+)\(").unwrap(),
         Regex::new(r#"(?:\b|[^a-zA-Z0-9$])(?P<sig>[a-zA-Z0-9$]{2})\s*=\s*function\(\s*a\s*\)\s*\{\s*a\s*=\s*a\.split\(\s*""\s*\)"#).unwrap(),
@@ -165,16 +183,18 @@ fn get_initial_function_name(js: &str) -> Result<&str> {
         Regex::new(r"\bc\s*&&\s*a\.set\([^,]+\s*,\s*\([^)]*\)\s*\(\s*(?P<sig>[a-zA-Z0-9$]+)\(").unwrap(),
         Regex::new(r"\bc\s*&&\s*[a-zA-Z0-9]+\.set\([^,]+\s*,\s*\([^)]*\)\s*\(\s*(?P<sig>[a-zA-Z0-9$]+)\(").unwrap(),
         Regex::new(r"\bc\s*&&\s*[a-zA-Z0-9]+\.set\([^,]+\s*,\s*\([^)]*\)\s*\(\s*(?P<sig>[a-zA-Z0-9$]+)\(").unwrap(),
-    ]);
+    ]
+    });
 
     FUNCTION_PATTERNS
         .iter()
         .find_map(|pattern| pattern.captures(js))
         .map(|c| c.get(1).unwrap().as_str())
-        .ok_or_else(|| Error::UnexpectedResponse(format!(
-            "could not find the JavaScript function name: `{}`",
-            js
-        ).into()))
+        .ok_or_else(|| {
+            Error::UnexpectedResponse(
+                format!("could not find the JavaScript function name: `{}`", js).into(),
+            )
+        })
 }
 
 fn get_transform_map(js: &str, var: &str) -> Result<HashMap<String, TransformerFn>> {
@@ -183,12 +203,15 @@ fn get_transform_map(js: &str, var: &str) -> Result<HashMap<String, TransformerF
 
     for obj in transform_object.split(", ") {
         // AJ:function(a){a.reverse()} => AJ, function(a){a.reverse()}
-        let (name, function) = obj
-            .split_once(':')
-            .ok_or_else(|| Error::UnexpectedResponse(format!(
-                "expected the transform-object to contain at least one ':', got {}",
-                obj
-            ).into()))?;
+        let (name, function) = obj.split_once(':').ok_or_else(|| {
+            Error::UnexpectedResponse(
+                format!(
+                    "expected the transform-object to contain at least one ':', got {}",
+                    obj
+                )
+                .into(),
+            )
+        })?;
         let fun = map_functions(function)?;
         mapper.insert(name.to_owned(), fun);
     }
@@ -198,16 +221,31 @@ fn get_transform_map(js: &str, var: &str) -> Result<HashMap<String, TransformerF
 
 #[allow(clippy::ptr_arg)]
 fn map_functions(js_func: &str) -> Result<TransformerFn> {
-    static MAPPER: Lazy<[(Regex, TransformerFn); 4]> = Lazy::new(|| [
-        // function(a){a.reverse()}
-        (Regex::new(r"\{\w\.reverse\(\)}").unwrap(), (reverse, "reverse")),
-        // function(a,b){a.splice(0,b)}
-        (Regex::new(r"\{\w\.splice\(0,\w\)}").unwrap(), (splice, "splice")),
-        // function(a,b){var c=a[0];a[0]=a[b%a.length];a[b%a.length]=c}
-        (Regex::new(r"\{var\s\w=\w\[0];\w\[0]=\w\[\w%\w.length];\w\[\w%\w.length]=\w}").unwrap(), (swap, "swap")),
-        // function(a,b){var c=a[0];a[0]=a[b%a.length];a[b]=c}
-        (Regex::new(r"\{var\s\w=\w\[0];\w\[0]=\w\[\w%\w.length];\w\[\w]=\w}").unwrap(), (swap, "swap")),
-    ]);
+    static MAPPER: Lazy<[(Regex, TransformerFn); 4]> = Lazy::new(|| {
+        [
+            // function(a){a.reverse()}
+            (
+                Regex::new(r"\{\w\.reverse\(\)}").unwrap(),
+                (reverse, "reverse"),
+            ),
+            // function(a,b){a.splice(0,b)}
+            (
+                Regex::new(r"\{\w\.splice\(0,\w\)}").unwrap(),
+                (splice, "splice"),
+            ),
+            // function(a,b){var c=a[0];a[0]=a[b%a.length];a[b%a.length]=c}
+            (
+                Regex::new(r"\{var\s\w=\w\[0];\w\[0]=\w\[\w%\w.length];\w\[\w%\w.length]=\w}")
+                    .unwrap(),
+                (swap, "swap"),
+            ),
+            // function(a,b){var c=a[0];a[0]=a[b%a.length];a[b]=c}
+            (
+                Regex::new(r"\{var\s\w=\w\[0];\w\[0]=\w\[\w%\w.length];\w\[\w]=\w}").unwrap(),
+                (swap, "swap"),
+            ),
+        ]
+    });
 
     fn reverse(vec: &mut Vec<u8>, _: Option<isize>) {
         vec.reverse();
@@ -217,8 +255,12 @@ fn map_functions(js_func: &str) -> Result<TransformerFn> {
             None => vec.clear(),
             Some(p) if p.is_positive() && p as usize >= vec.len() => vec.clear(),
             Some(p) if p.is_negative() && -p as usize >= vec.len() => {}
-            Some(p) if p.is_negative() => { vec.drain(..vec.len() - p.unsigned_abs()); }
-            Some(p) => { vec.drain(..p as usize); }
+            Some(p) if p.is_negative() => {
+                vec.drain(..vec.len() - p.unsigned_abs());
+            }
+            Some(p) => {
+                vec.drain(..p as usize);
+            }
         }
     }
     fn swap(vec: &mut Vec<u8>, position: Option<isize>) {
@@ -248,10 +290,15 @@ fn map_functions(js_func: &str) -> Result<TransformerFn> {
         .iter()
         .find(|(pattern, _fun)| pattern.is_match(js_func))
         .map(|(_pattern, fun)| *fun)
-        .ok_or_else(|| Error::UnexpectedResponse(format!(
-            "could not map the JavaScript function `{}` to any Rust equivalent",
-            js_func
-        ).into()))
+        .ok_or_else(|| {
+            Error::UnexpectedResponse(
+                format!(
+                    "could not map the JavaScript function `{}` to any Rust equivalent",
+                    js_func
+                )
+                .into(),
+            )
+        })
 }
 
 fn get_transform_object(js: &str, var: &str) -> Result<String> {
@@ -259,13 +306,14 @@ fn get_transform_object(js: &str, var: &str) -> Result<String> {
         Regex::new(&format!(r"var {}=\{{((?s).*?)}};", regex::escape(var)))
             .unwrap()
             .captures(js)
-            .ok_or_else(|| Error::UnexpectedResponse(format!(
-                "could not extract the transform-object `{}`",
-                var
-            ).into()))?
+            .ok_or_else(|| {
+                Error::UnexpectedResponse(
+                    format!("could not extract the transform-object `{}`", var).into(),
+                )
+            })?
             .get(1)
             .expect("the regex pattern must contain at least one capture group")
             .as_str()
-            .replace('\n', " ")
+            .replace('\n', " "),
     )
 }

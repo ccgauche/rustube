@@ -1,3 +1,5 @@
+use std::{fs::OpenOptions, io::Write};
+
 use alloc::sync::Arc;
 use regex::Regex;
 
@@ -211,7 +213,7 @@ fn get_throttling_function_code(js: &str) -> String {
     std::fs::write("pattern.txt", pattern_start.clone()).unwrap();
     let regex = Regex::new(&pattern_start).unwrap();
     let matched = regex.find(js).unwrap();
-    let joined_lines = find_object_from_startpoint(js, matched.end())
+    let joined_lines = find_object(&js[matched.end()..])
         .split('\n')
         .collect::<Vec<&str>>()
         .join("");
@@ -288,7 +290,7 @@ fn get_throttling_function_array(js: &str) -> Vec<Value> {
     let array_start = r#",c=\["#;
     let array_regex = Regex::new(array_start).unwrap();
     let matched = array_regex.find(&raw_code).unwrap();
-    let array_raw = find_object_from_startpoint(&raw_code, matched.end() - 1);
+    let array_raw = find_object(&raw_code[matched.end() - 1..]);
     let str_array = throttling_array_split(&array_raw);
     let mut converted_array = vec![];
     for el in str_array {
@@ -307,15 +309,15 @@ fn get_throttling_function_array(js: &str) -> Vec<Value> {
         if el.starts_with("function") {
             let mapper = vec![
                 (
-                    r#"{for\(\w=\(\w%\w\.length\+\w\.length\)%\w\.length;\w--;\)\w\.unshift\(\w.pop\(\)\)}"#,
+                    r#"\{for\(\w=\(\w%\w\.length\+\w\.length\)%\w\.length;\w--;\)\w\.unshift\(\w.pop\(\)\)\}"#,
                     Value::FunctionTwoMut(Arc::new(Box::new(throttling_unshift))),
                 ), // noqa:E501
                 (
-                    r#"{\w\.reverse\(\)}"#,
+                    r#"\{\w\.reverse\(\)\}"#,
                     Value::FunctionTwoMut(Arc::new(Box::new(throttling_reverse))),
                 ),
                 (
-                    r#"{\w\.push\(\w\)}"#,
+                    r#"\{\w\.push\(\w\)\}"#,
                     Value::FunctionTwoMut(Arc::new(Box::new(throttling_push))),
                 ),
                 (
@@ -337,7 +339,7 @@ fn get_throttling_function_array(js: &str) -> Vec<Value> {
                     }))),
                 ),
                 (
-                    r#"\w\.splice\(-\w\)\.reverse\(\)\.forEach\(function\(\w\){\w\.unshift\(\w\)}\)"#,
+                    r#"\w\.splice\(-\w\)\.reverse\(\)\.forEach\(function\(\w\)\{\w\.unshift\(\w\)\}\)"#,
                     Value::FunctionTwoMut(Arc::new(Box::new(throttling_prepend))),
                 ), // noqa:E501
                 (
@@ -407,10 +409,11 @@ return transform_steps */
 
 fn get_throttling_plan(js: &str) -> Vec<(i32, i32, Option<i32>)> {
     let raw_code = get_throttling_function_code(js);
-    let transform_start = r#"try{"#;
+    let transform_start = r#"try\{"#;
+    std::fs::write("debug.1.js", &raw_code).unwrap();
     let plan_regex = Regex::new(transform_start).unwrap();
     let matched = plan_regex.find(&raw_code).unwrap();
-    let transform_plan_raw = find_object_from_startpoint(&raw_code, matched.end() - 1);
+    let transform_plan_raw = find_object(&raw_code[matched.end() - 1..]);
     let step_start = r#"c\[(\d+)\]\(c\[(\d+)\](,c(\[(\d+)\]))?\)"#;
     let step_regex = Regex::new(step_start).unwrap();
     let mut transform_steps = vec![];
@@ -836,7 +839,6 @@ fn js_splice(arr: &mut Value, start: Value, delete_count: Value, items: Value) -
     }
 }
 
-
 /*
 def find_object_from_startpoint(html, start_point):
     """Parses input html to find the end of a JavaScript object.
@@ -894,53 +896,81 @@ def find_object_from_startpoint(html, start_point):
 
 */
 
-fn find_object_from_startpoint(html: &str, start_point: usize) -> String {
-    let html = &html[start_point..];
+fn find_object(html: &str) -> String {
     if !html.starts_with('{') && !html.starts_with('[') {
         panic!("Invalid start point. Start of HTML:\n{}", &html[..20]);
     }
+    let mut html = html.chars();
 
-    let mut stack = vec![html.chars().nth(0).unwrap()];
-    let mut i = 1;
+    let first = html.next().unwrap();
 
-    let context_closers = vec![('{', '}'), ('[', ']'), ('"', '"')];
+    let mut stack = vec![first];
 
-    while i < html.len() {
-        if stack.len() == 0 {
-            break;
-        }
-        let curr_char = html.chars().nth(i).unwrap();
-        let curr_context = stack[stack.len() - 1];
+    let context_closers = vec![('}', '{'), (']', '['), ('"', '"')];
 
-        if curr_char
-            == context_closers
-                .iter()
-                .find(|(c, _)| *c == curr_context)
-                .unwrap()
-                .1
-        {
+    let mut string = String::new();
+
+    string.push(first);
+
+    while !stack.is_empty() {
+        let current = html.next().unwrap();
+        string.push(current);
+        if stack.last() == Some(&'"') {
+            if current == '\\' {
+                string.push(html.next().unwrap());
+            } else if current == '"' {
+                stack.pop();
+            }
+        } else if context_closers.iter().any(|(_, c)| *c == current) {
+            stack.push(current);
+        } else if context_closers.iter().any(|(c, _)| *c == current) {
             stack.pop();
-            i += 1;
-            continue;
         }
-
-        if curr_context == '"' {
-            if curr_char == '\\' {
-                i += 2;
-                continue;
-            }
-        } else {
-            if context_closers.iter().any(|(c, _)| *c == curr_char) {
-                stack.push(curr_char);
-            }
-        }
-
-        i += 1;
     }
 
-    let full_obj = &html[..i];
-    full_obj.to_string()
+    string
 }
+
+fn find_object_until(html: &str, until: char) -> String {
+    let mut html = html.chars();
+
+    let mut stack = vec![];
+
+    let context_closers = vec![('}', '{'), (']', '['), ('"', '"')];
+
+    let mut string = String::new();
+
+    loop {
+        let current = if stack.is_empty() {
+            if let Some(e) = html.next() {
+                if e == until {
+                    return string;
+                } else {
+                    e
+                }
+            } else {
+                return string;
+            }
+        } else {
+            html.next().unwrap()
+        };
+        string.push(current);
+        if stack.last() == Some(&'"') {
+            if current == '\\' {
+                string.push(html.next().unwrap());
+            } else if current == '"' {
+                stack.pop();
+            }
+        } else if context_closers.iter().any(|(_, c)| *c == current) {
+            stack.push(current);
+        } else if context_closers.iter().any(|(c, _)| *c == current) {
+            stack.pop();
+        }
+    }
+}
+
+#[test]
+fn test_find() {}
 
 /*
 def throttling_array_split(js_array):
@@ -987,31 +1017,33 @@ def throttling_array_split(js_array):
     return results
 */
 fn throttling_array_split(js_array: &str) -> Vec<String> {
-    let mut results = vec![];
-    let mut curr_substring = &js_array[1..];
+    let mut js_array = &js_array[1..js_array.len() - 1];
 
-    let comma_regex = Regex::new(r",").unwrap();
-    let func_regex = Regex::new(r#"function\([^)]*\)"#).unwrap();
+    let mut array = Vec::new();
 
-    while curr_substring.len() > 0 {
-        if curr_substring.starts_with("function") {
-            let match_ = func_regex.find(curr_substring).unwrap();
-            let match_end = match_.end();
-
-            let function_text = find_object_from_startpoint(curr_substring, match_end);
-            let full_function_def = &curr_substring[..match_end + function_text.len()];
-            results.push(full_function_def.to_string());
-            curr_substring = &curr_substring[full_function_def.len() + 1..];
-        } else {
-            let match_ = comma_regex.find(curr_substring).unwrap();
-            let match_start = match_.start();
-            let match_end = match_.end();
-
-            let curr_el = &curr_substring[..match_start];
-            results.push(curr_el.to_string());
-            curr_substring = &curr_substring[match_end..];
+    loop {
+        js_array = js_array.trim();
+        if js_array.is_empty() {
+            break;
         }
+        let k = find_object_until(js_array, ',');
+        js_array = &js_array[k.len()..];
+        if js_array.starts_with(',') {
+            js_array = &js_array[1..];
+        }
+        array.push(k);
     }
 
-    results
+    array
+}
+
+fn log_debug(msg: &str) {
+    // Append msg to the log-debug.txt file
+    let mut file = OpenOptions::new()
+        .append(true)
+        .create(true)
+        .open("log-debug.txt")
+        .unwrap();
+    file.write_all(msg.as_bytes()).unwrap();
+    file.write_all(&[b'\n']).unwrap();
 }

@@ -9,9 +9,7 @@ license = "MIT OR Apache-2.0"
 readme = "README.md"
 repository = "https://github.com/DzenanJupic/rustube"
 documentation = "https://docs.rs/rustube"
-include = [
-    "src/**/*", "Cargo.toml",
-]
+include = ["src/**/*", "Cargo.toml"]
 
 [package.metadata.docs.rs]
 all-features = true
@@ -34,7 +32,10 @@ log-derive = "0.4.1"
 mime = { version = "0.3.16", optional = true }
 regex = { version = "1.5.4", optional = true }
 reqwest = { version = "0.11.5", default_features = false, optional = true }
-serde = { version = "1.0.130", default-features = false, features = ["alloc", "derive"] }
+serde = { version = "1.0.130", default-features = false, features = [
+    "alloc",
+    "derive",
+] }
 serde_qs = { version = "0.8.5", optional = true }
 serde_json = { version = "1.0.68", optional = true }
 serde_with = { version = "1.10.0", optional = true }
@@ -62,13 +63,30 @@ std = ["regex", "thiserror"]
 callback = ["tokio/sync", "futures", "download"]
 microformat = ["fetch", "chrono/serde"]
 download = [
-    "fetch", "tokio/fs", "tokio/io-util", "tokio/parking_lot", "tokio-stream"
+    "fetch",
+    "tokio/fs",
+    "tokio/io-util",
+    "tokio/parking_lot",
+    "tokio-stream",
 ]
 # could be usefull if you don't want to download videos, but just want to get information like title, view-count, ...
 fetch = [
-    "tokio/macros", "reqwest/json",
-    "serde/default", "serde/rc", "serde_with/json", "serde_json", "serde_qs", "bytes", "chrono", "mime",
-    "std", "descramble", "url/serde", "reqwest/cookies", "reqwest/stream", "reqwest/gzip"
+    "tokio/macros",
+    "reqwest/json",
+    "serde/default",
+    "serde/rc",
+    "serde_with/json",
+    "serde_json",
+    "serde_qs",
+    "bytes",
+    "chrono",
+    "mime",
+    "std",
+    "descramble",
+    "url/serde",
+    "reqwest/cookies",
+    "reqwest/stream",
+    "reqwest/gzip",
 ]
 descramble = ["fetch", "stream"]
 stream = ["descramble", "chrono/serde"]

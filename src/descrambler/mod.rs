@@ -210,6 +210,9 @@ fn apply_signature(streaming_data: &mut StreamingData, js: &str) -> crate::Resul
         .chain(streaming_data.adaptive_formats.iter_mut())
     {
         let url = &mut raw_format.signature_cipher.url;
+        if url.query_pairs().any(|(key, _)| key == "signature") {
+            continue;
+        }
         let s = match raw_format.signature_cipher.s {
             Some(ref mut s) => s,
             None if url_already_contains_signature(url) => continue,

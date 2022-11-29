@@ -3,7 +3,7 @@
 use std::path::PathBuf;
 
 use common::*;
-use rustube::VideoFetcher;
+use rustube::{Id, VideoFetcher};
 
 #[macro_use]
 mod common;
@@ -11,11 +11,10 @@ mod common;
 #[test_env_log::test(tokio::test)]
 #[ignore]
 async fn download() {
-    let id = random_id(PRE_SIGNED);
-    let expected_path = download_path_from_id(id.as_borrowed()).await;
+    let expected_path = download_path_from_id(Id::from_str("XKFVn06QICc").unwrap()).await;
 
-    let path: PathBuf = video!(id.as_owned())
-        .worst_quality()
+    let path: PathBuf = video!(Id::from_str("XKFVn06QICc").unwrap())
+        .worst_audio()
         .unwrap()
         .download()
         .await
@@ -50,8 +49,7 @@ fn blocking_download_to_dir() {
     let id = random_id(PRE_SIGNED);
     let expected_path = block!(download_path_from_id(id.as_borrowed()));
 
-    let path = dbg!(Video::from_id(id)
-        .unwrap())
+    let path = dbg!(Video::from_id(id).unwrap())
         .worst_quality()
         .unwrap()
         .blocking_download_to_dir(DOWNLOAD_DIR)
